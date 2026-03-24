@@ -1,0 +1,5 @@
+[build]
+builder = "NIXPACKS"
+[deploy]
+startCommand = "gunicorn app:app --timeout 120 --workers 1 --worker-class gevent --bind 0.0.0.0:$PORT"
+restartPolicyType = "ON_FAILURE"

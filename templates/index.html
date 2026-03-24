@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KickMetrics – Football Performance AI</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Sora:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0d0d0b;--surface:#161614;--surface2:#1e1e1b;--border:#2a2a26;--text:#f0ede8;--text2:#8a8a82;--text3:#4a4a44;--green:#22a05a;--green-light:rgba(34,160,90,0.12);--red:#c0392b;--mono:'DM Mono',monospace;--sans:'Sora',sans-serif;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:100vh;font-size:14px;}
+/* NAV */
+nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:center;justify-content:space-between;padding:1.2rem 3rem;background:rgba(13,13,11,.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);}
+.logo{font-size:1.3rem;font-weight:900;color:var(--text);letter-spacing:-.04em;}
+.logo span{color:var(--green);}
+.nav-btns{display:flex;gap:.75rem;}
+.btn{display:inline-flex;align-items:center;gap:.45rem;padding:.55rem 1.2rem;border-radius:7px;font-family:var(--sans);font-size:.82rem;font-weight:600;cursor:pointer;border:none;transition:all .15s;text-decoration:none;}
+.btn-ghost{background:transparent;color:var(--text2);border:1px solid var(--border);}
+.btn-ghost:hover{background:var(--surface2);color:var(--text);}
+.btn-green{background:var(--green);color:#fff;}
+.btn-green:hover{filter:brightness(1.1);}
+.btn-sm{padding:.4rem .9rem;font-size:.75rem;}
+/* HERO */
+.hero{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:6rem 2rem 4rem;position:relative;overflow:hidden;}
+.hero::before{content:'';position:absolute;top:20%;left:50%;transform:translate(-50%,-50%);width:600px;height:600px;background:radial-gradient(circle,rgba(34,160,90,.12) 0%,transparent 70%);pointer-events:none;}
+.hero-badge{display:inline-flex;align-items:center;gap:.5rem;font-family:var(--mono);font-size:.72rem;color:var(--green);border:1px solid rgba(34,160,90,.3);padding:.35rem .85rem;border-radius:20px;margin-bottom:2rem;letter-spacing:.08em;}
+.hero-badge::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--green);animation:blink 2s infinite;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+h1{font-size:clamp(3rem,7vw,6rem);font-weight:900;letter-spacing:-.04em;line-height:.95;margin-bottom:1.5rem;}
+h1 em{font-style:normal;color:var(--green);}
+.hero-sub{font-size:1.1rem;font-weight:300;color:var(--text2);max-width:520px;line-height:1.7;margin-bottom:2.5rem;}
+.hero-ctas{display:flex;gap:1rem;flex-wrap:wrap;justify-content:center;margin-bottom:4rem;}
+.hero-ctas .btn{padding:.8rem 2rem;font-size:.9rem;}
+.stats-row{display:flex;gap:3rem;flex-wrap:wrap;justify-content:center;}
+.hero-stat .num{font-family:var(--mono);font-size:2rem;font-weight:500;color:var(--green);}
+.hero-stat .lbl{font-size:.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;margin-top:.2rem;}
+/* FEATURES */
+.features{padding:5rem 3rem;max-width:1100px;margin:0 auto;}
+.section-tag{font-family:var(--mono);font-size:.72rem;color:var(--green);letter-spacing:.15em;text-transform:uppercase;margin-bottom:1rem;}
+.section-title{font-size:clamp(2rem,4vw,3rem);font-weight:800;letter-spacing:-.03em;margin-bottom:3rem;line-height:1.1;}
+.features-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1.5rem;}
+.feat-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:2rem;transition:border-color .2s;}
+.feat-card:hover{border-color:rgba(34,160,90,.4);}
+.feat-icon{font-size:2rem;margin-bottom:1.25rem;}
+.feat-title{font-size:1rem;font-weight:700;margin-bottom:.6rem;}
+.feat-desc{font-size:.85rem;color:var(--text2);line-height:1.7;}
+/* MODALS */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(6px);z-index:200;align-items:center;justify-content:center;}
+.modal-overlay.show{display:flex;}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:2.5rem;width:100%;max-width:440px;max-height:90vh;overflow-y:auto;}
+.modal-title{font-size:1.3rem;font-weight:800;letter-spacing:-.03em;margin-bottom:.4rem;}
+.modal-sub{font-size:.82rem;color:var(--text2);margin-bottom:2rem;}
+.fg{display:flex;flex-direction:column;gap:.35rem;margin-bottom:1rem;}
+.fg label{font-size:.68rem;font-weight:700;color:var(--text2);letter-spacing:.05em;text-transform:uppercase;}
+.fg input,.fg select{padding:.65rem .9rem;border:1px solid var(--border);border-radius:7px;font-family:var(--sans);font-size:.875rem;background:var(--surface2);color:var(--text);outline:none;transition:border-color .15s;width:100%;}
+.fg input:focus,.fg select:focus{border-color:var(--green);}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:.75rem;}
+.modal-switch{text-align:center;font-size:.8rem;color:var(--text2);margin-top:1.25rem;}
+.modal-switch a{color:var(--green);cursor:pointer;text-decoration:none;}
+.err-msg{background:rgba(192,57,43,.12);border:1px solid rgba(192,57,43,.3);border-radius:6px;padding:.65rem .85rem;font-size:.8rem;color:#e07060;margin-bottom:1rem;display:none;}
+.err-msg.show{display:block;}
+.divider{display:flex;align-items:center;gap:.75rem;margin:1.25rem 0;color:var(--text3);font-size:.75rem;}
+.divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border);}
+/* COLOUR PICKER */
+.colour-grid{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.35rem;}
+.colour-dot{width:1.8rem;height:1.8rem;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:all .15s;}
+.colour-dot.active,.colour-dot:hover{border-color:var(--text);transform:scale(1.15);}
+/* FOOTER */
+footer{padding:2rem 3rem;border-top:1px solid var(--border);text-align:center;font-size:.78rem;color:var(--text3);}
+@media(max-width:700px){.features-grid{grid-template-columns:1fr;}.form-grid{grid-template-columns:1fr;}.stats-row{gap:1.5rem;}}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="logo">Kick<span>Metrics</span></div>
+  <div class="nav-btns">
+    <button class="btn btn-ghost btn-sm" onclick="openModal('coachLogin')">Coach Login</button>
+    <button class="btn btn-ghost btn-sm" onclick="openModal('playerLogin')">Player Login</button>
+    <button class="btn btn-green btn-sm" onclick="openModal('coachSignup')">Get Started</button>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-badge">AI-Powered Football Analysis</div>
+  <h1>Track Every Touch.<br><em>Measure Every Move.</em></h1>
+  <p class="hero-sub">KickMetrics gives coaches real-time squad analytics and gives players their own performance dashboard — powered by AI video analysis.</p>
+  <div class="hero-ctas">
+    <button class="btn btn-green" onclick="openModal('coachSignup')">🏟️ I'm a Coach</button>
+    <button class="btn btn-ghost" onclick="openModal('playerLogin')">⚽ I'm a Player</button>
+  </div>
+  <div class="stats-row">
+    <div class="hero-stat"><div class="num">12+</div><div class="lbl">Stats tracked</div></div>
+    <div class="hero-stat"><div class="num">AI</div><div class="lbl">Video analysis</div></div>
+    <div class="hero-stat"><div class="num">Live</div><div class="lbl">Squad rankings</div></div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<div class="features">
+  <div class="section-tag">Platform Features</div>
+  <div class="section-title">Everything coaches<br>and players need</div>
+  <div class="features-grid">
+    <div class="feat-card"><div class="feat-icon">🎬</div><div class="feat-title">AI Video Analysis</div><div class="feat-desc">Upload match footage, select your player, and get passes, shots, sprints, tackles, dribbles and more — automatically.</div></div>
+    <div class="feat-card"><div class="feat-icon">🏟️</div><div class="feat-title">Coach Dashboard</div><div class="feat-desc">See your entire squad's stats in one place. Set individual and team goals, track progress, and identify top performers.</div></div>
+    <div class="feat-card"><div class="feat-icon">👤</div><div class="feat-title">Player Profiles</div><div class="feat-desc">Every player gets their own dashboard showing their stats, goals set by the coach, match history, and performance trends.</div></div>
+    <div class="feat-card"><div class="feat-icon">🎯</div><div class="feat-title">Goal Setting</div><div class="feat-desc">Coaches set per-match and season goals for individuals or the whole team. Players see exactly what's expected of them.</div></div>
+    <div class="feat-card"><div class="feat-icon">🏆</div><div class="feat-title">Squad Rankings</div><div class="feat-desc">Automatic leaderboards across every stat category — tackles, passes, sprint distance, shots and more.</div></div>
+    <div class="feat-card"><div class="feat-icon">🎨</div><div class="feat-title">Fully Customisable</div><div class="feat-desc">Coaches upload their team logo to set the dashboard colour scheme. Players personalise their own interface.</div></div>
+  </div>
+</div>
+
+<footer>© 2026 KickMetrics. Built for the beautiful game.</footer>
+
+<!-- ── COACH SIGNUP MODAL ── -->
+<div class="modal-overlay" id="coachSignupModal">
+  <div class="modal">
+    <div class="modal-title">Create Coach Account</div>
+    <div class="modal-sub">Set up your team and invite your players</div>
+    <div class="err-msg" id="coachSignupErr"></div>
+    <div class="fg"><label>Your Name</label><input type="text" id="cs_name" placeholder="Alex Ferguson"></div>
+    <div class="fg"><label>Team Name</label><input type="text" id="cs_team" placeholder="FC United"></div>
+    <div class="fg"><label>Email</label><input type="email" id="cs_email" placeholder="coach@email.com"></div>
+    <div class="fg"><label>Password</label><input type="password" id="cs_pw" placeholder="••••••••"></div>
+    <button class="btn btn-green" style="width:100%;justify-content:center;padding:.75rem;" onclick="coachSignup()">Create Team & Account</button>
+    <div class="modal-switch">Already have an account? <a onclick="openModal('coachLogin')">Sign in</a></div>
+    <div class="modal-switch"><a onclick="closeModals()">✕ Close</a></div>
+  </div>
+</div>
+
+<!-- ── COACH LOGIN MODAL ── -->
+<div class="modal-overlay" id="coachLoginModal">
+  <div class="modal">
+    <div class="modal-title">Coach Login</div>
+    <div class="modal-sub">Access your team dashboard</div>
+    <div class="err-msg" id="coachLoginErr"></div>
+    <div class="fg"><label>Email</label><input type="email" id="cl_email" placeholder="coach@email.com"></div>
+    <div class="fg"><label>Password</label><input type="password" id="cl_pw" placeholder="••••••••"></div>
+    <button class="btn btn-green" style="width:100%;justify-content:center;padding:.75rem;" onclick="coachLogin()">Sign In to Dashboard</button>
+    <div class="modal-switch">No account? <a onclick="openModal('coachSignup')">Create one</a></div>
+    <div class="modal-switch"><a onclick="closeModals()">✕ Close</a></div>
+  </div>
+</div>
+
+<!-- ── PLAYER LOGIN MODAL ── -->
+<div class="modal-overlay" id="playerLoginModal">
+  <div class="modal">
+    <div class="modal-title">Player Login</div>
+    <div class="modal-sub">Access your performance dashboard</div>
+    <div class="err-msg" id="playerLoginErr"></div>
+    <div class="fg"><label>Email</label><input type="email" id="pl_email" placeholder="player@email.com"></div>
+    <div class="fg"><label>Password</label><input type="password" id="pl_pw" placeholder="••••••••"></div>
+    <button class="btn btn-green" style="width:100%;justify-content:center;padding:.75rem;" onclick="playerLogin()">Sign In</button>
+    <div class="divider">or</div>
+    <button class="btn btn-ghost" style="width:100%;justify-content:center;" onclick="openModal('playerSignup')">Join a Team with Code</button>
+    <div class="modal-switch"><a onclick="closeModals()">✕ Close</a></div>
+  </div>
+</div>
+
+<!-- ── PLAYER SIGNUP MODAL ── -->
+<div class="modal-overlay" id="playerSignupModal">
+  <div class="modal">
+    <div class="modal-title">Join Your Team</div>
+    <div class="modal-sub">Enter your team code and set up your profile</div>
+    <div class="err-msg" id="playerSignupErr"></div>
+    <div class="fg"><label>Team Code (from your coach)</label><input type="text" id="ps_code" placeholder="e.g. AB12CD34" style="text-transform:uppercase;letter-spacing:.1em;"></div>
+    <div class="divider">Your Details</div>
+    <div class="form-grid">
+      <div class="fg"><label>First Name</label><input type="text" id="ps_first" placeholder="Jamie"></div>
+      <div class="fg"><label>Last Name</label><input type="text" id="ps_last" placeholder="Davies"></div>
+    </div>
+    <div class="form-grid">
+      <div class="fg"><label>Position</label>
+        <select id="ps_pos">
+          <option value="">Select…</option>
+          <option>Goalkeeper</option><option>Right Back</option><option>Centre Back</option>
+          <option>Left Back</option><option>Defensive Mid</option><option>Central Mid</option>
+          <option>Attacking Mid</option><option>Right Wing</option><option>Left Wing</option>
+          <option>Striker</option>
+        </select>
+      </div>
+      <div class="fg"><label>Shirt Number</label><input type="number" id="ps_num" placeholder="9" min="1" max="99"></div>
+    </div>
+    <div class="form-grid">
+      <div class="fg"><label>Height (cm)</label><input type="number" id="ps_height" placeholder="175"></div>
+      <div class="fg"><label>Preferred Foot</label>
+        <select id="ps_foot"><option value="right">Right</option><option value="left">Left</option><option value="both">Both</option></select>
+      </div>
+    </div>
+    <div class="fg"><label>Date of Birth</label><input type="date" id="ps_dob"></div>
+    <div class="fg"><label>Email</label><input type="email" id="ps_email" placeholder="player@email.com"></div>
+    <div class="fg"><label>Password</label><input type="password" id="ps_pw" placeholder="••••••••"></div>
+    <div class="fg">
+      <label>Your Dashboard Colour</label>
+      <div class="colour-grid" id="themeColours"></div>
+    </div>
+    <button class="btn btn-green" style="width:100%;justify-content:center;padding:.75rem;margin-top:.5rem;" onclick="playerSignup()">Create Profile & Join Team</button>
+    <div class="modal-switch">Already have an account? <a onclick="openModal('playerLogin')">Sign in</a></div>
+    <div class="modal-switch"><a onclick="closeModals()">✕ Close</a></div>
+  </div>
+</div>
+
+<script>
+var selectedTheme = '#22a05a';
+var themeOptions = ['#22a05a','#1a6ba0','#c0392b','#8e44ad','#e67e22','#16a085','#2c3e50','#d35400','#27ae60','#2980b9'];
+
+function buildThemePicker() {
+  var el = document.getElementById('themeColours');
+  el.innerHTML = themeOptions.map(function(c) {
+    return '<div class="colour-dot'+(c===selectedTheme?' active':'')+'" style="background:'+c+';" onclick="selectTheme(\''+c+'\',this)"></div>';
+  }).join('');
+}
+buildThemePicker();
+
+function selectTheme(c, el) {
+  selectedTheme = c;
+  document.querySelectorAll('.colour-dot').forEach(function(d){d.classList.remove('active');});
+  el.classList.add('active');
+}
+
+function openModal(name) {
+  closeModals();
+  document.getElementById(name+'Modal').classList.add('show');
+}
+function closeModals() {
+  document.querySelectorAll('.modal-overlay').forEach(function(m){m.classList.remove('show');});
+}
+document.querySelectorAll('.modal-overlay').forEach(function(m){
+  m.addEventListener('click',function(e){if(e.target===m)closeModals();});
+});
+
+function showErr(id, msg) {
+  var el = document.getElementById(id);
+  el.textContent = msg; el.classList.add('show');
+}
+function clearErr(id) { document.getElementById(id).classList.remove('show'); }
+
+async function coachSignup() {
+  clearErr('coachSignupErr');
+  var name=document.getElementById('cs_name').value;
+  var team=document.getElementById('cs_team').value;
+  var email=document.getElementById('cs_email').value;
+  var pw=document.getElementById('cs_pw').value;
+  if(!name||!team||!email||!pw){showErr('coachSignupErr','All fields required');return;}
+  try {
+    var res = await fetch('/api/coach/signup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,team_name:team,email:email,password:pw})});
+    var data = await res.json();
+    if(data.error){showErr('coachSignupErr',data.error);return;}
+    localStorage.setItem('km_coach',JSON.stringify(data));
+    window.location.href='/coach';
+  } catch(e){showErr('coachSignupErr','Connection error — try again');}
+}
+
+async function coachLogin() {
+  clearErr('coachLoginErr');
+  var email=document.getElementById('cl_email').value;
+  var pw=document.getElementById('cl_pw').value;
+  if(!email||!pw){showErr('coachLoginErr','All fields required');return;}
+  try {
+    var res = await fetch('/api/coach/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:email,password:pw})});
+    var data = await res.json();
+    if(data.error){showErr('coachLoginErr',data.error);return;}
+    localStorage.setItem('km_coach',JSON.stringify(data));
+    window.location.href='/coach';
+  } catch(e){showErr('coachLoginErr','Connection error');}
+}
+
+async function playerLogin() {
+  clearErr('playerLoginErr');
+  var email=document.getElementById('pl_email').value;
+  var pw=document.getElementById('pl_pw').value;
+  if(!email||!pw){showErr('playerLoginErr','All fields required');return;}
+  try {
+    var res = await fetch('/api/player/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:email,password:pw})});
+    var data = await res.json();
+    if(data.error){showErr('playerLoginErr',data.error);return;}
+    localStorage.setItem('km_player',JSON.stringify(data));
+    window.location.href='/player';
+  } catch(e){showErr('playerLoginErr','Connection error');}
+}
+
+async function playerSignup() {
+  clearErr('playerSignupErr');
+  var code=document.getElementById('ps_code').value.toUpperCase();
+  var first=document.getElementById('ps_first').value;
+  var last=document.getElementById('ps_last').value;
+  var pos=document.getElementById('ps_pos').value;
+  var num=document.getElementById('ps_num').value;
+  var height=document.getElementById('ps_height').value;
+  var foot=document.getElementById('ps_foot').value;
+  var dob=document.getElementById('ps_dob').value;
+  var email=document.getElementById('ps_email').value;
+  var pw=document.getElementById('ps_pw').value;
+  if(!code||!first||!email||!pw){showErr('playerSignupErr','Name, email, password and team code are required');return;}
+  try {
+    var res = await fetch('/api/player/signup',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({name:first+' '+last,email:email,password:pw,team_code:code,
+        position:pos,shirt_number:num,height:height,foot:foot,dob:dob,theme_colour:selectedTheme})});
+    var data = await res.json();
+    if(data.error){showErr('playerSignupErr',data.error);return;}
+    localStorage.setItem('km_player',JSON.stringify(data));
+    window.location.href='/player';
+  } catch(e){showErr('playerSignupErr','Connection error');}
+}
+
+// Auto-fill team code from URL if player came via invite link
+var urlParts = window.location.pathname.split('/');
+if(urlParts[1]==='join' && urlParts[2]){
+  openModal('playerSignup');
+  document.getElementById('ps_code').value=urlParts[2].toUpperCase();
+}
+</script>
+</body>
+</html>
