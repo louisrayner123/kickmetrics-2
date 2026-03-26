@@ -660,8 +660,10 @@ def reid_player(frame, sig, team_hue, predictor, bw, bh):
     px, py = predictor.predict(steps=3)
     if px is None: px, py = w // 2, h // 2
     best_score = 0.45; best_bbox = None
-    sx, sy = max(bw // 2, 20), max(bh // 2, 20)
-    for radius in [(bw * 3, bh * 3), (bw * 8, bh * 8), (w, h)]:
+    # Coarser grid step = fewer candidates = much faster
+    sx, sy = max(bw, 20), max(bh, 20)
+    # Only search a tight radius around predicted position — skip full-frame scan
+    for radius in [(bw * 4, bh * 4), (bw * 10, bh * 10)]:
         x1 = max(0, px - radius[0]); x2 = min(w - bw, px + radius[0])
         y1 = max(0, py - radius[1]); y2 = min(h - bh, py + radius[1])
         for fy in range(y1, y2, sy):
@@ -675,8 +677,9 @@ def reid_player(frame, sig, team_hue, predictor, bw, bh):
     return best_bbox
 
 def make_tracker():
-    for fn in [lambda: cv2.TrackerCSRT_create(), lambda: cv2.legacy.TrackerCSRT_create(),
-               lambda: cv2.TrackerKCF_create(), lambda: cv2.legacy.TrackerKCF_create(),
+    # KCF first — ~5x faster than CSRT with acceptable accuracy for sports tracking
+    for fn in [lambda: cv2.TrackerKCF_create(), lambda: cv2.legacy.TrackerKCF_create(),
+               lambda: cv2.TrackerCSRT_create(), lambda: cv2.legacy.TrackerCSRT_create(),
                lambda: cv2.TrackerMIL_create(), lambda: cv2.legacy.TrackerMIL_create()]:
         try:
             t = fn()
@@ -694,7 +697,7 @@ def run_job(jid, filepath, bbox, player_info, prev_goals):
         ret, frame0 = cap.read()
         if not ret: set_job(jid, {'status': 'error', 'error': 'Cannot read frame'}); cap.release(); return
         h0, w0 = frame0.shape[:2]
-        scale = min(1.0, 1280 / w0)
+        scale = min(1.0, 640 / w0)   # 640px max — 4x fewer pixels than 1280, ~4x faster
         if scale < 1.0: frame0 = cv2.resize(frame0, (int(w0 * scale), int(h0 * scale)))
         x = max(0, int(bbox['x'])); y = max(0, int(bbox['y']))
         bw = min(int(bbox['w']), frame0.shape[1] - x)
@@ -711,16 +714,18 @@ def run_job(jid, filepath, bbox, player_info, prev_goals):
         if tracker is None: set_job(jid, {'status': 'error', 'error': 'No tracker'}); cap.release(); return
         tracker.init(frame0, (x, y, bw, bh))
         predictor = TrajectoryPredictor(); predictor.update(x + bw // 2, y + bh // 2, 0)
-        sample_every = max(1, int(fps / 6)); LOST_THRESH = int(fps * 3 / sample_every)
+        sample_every = max(1, int(fps / 3)); LOST_THRESH = int(fps * 3 / sample_every)
         positions = []; ball_pos = []; frame_num = 0; lost_count = 0
         prev_cx = x + bw // 2; prev_cy = y + bh // 2; time_on_ball = 0.0
+        tw0, th0 = int(w0 * scale), int(h0 * scale)  # target resize dims
         update_job(jid, {'step': 'Tracking player…', 'progress': 12})
         while True:
+            # Seek directly to next sample frame — skips decoding intermediate frames entirely
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
             ret, frame = cap.read()
             if not ret: break
-            frame_num += 1
-            if scale < 1.0: frame = cv2.resize(frame, (int(w0 * scale), int(h0 * scale)))
-            if frame_num % sample_every != 0: continue
+            if scale < 1.0: frame = cv2.resize(frame, (tw0, th0))
+            frame_num += sample_every
             bx, by = detect_ball(frame, pitch_hue)
             if bx is not None: ball_pos.append((frame_num, bx, by))
             ok, tb = tracker.update(frame)
@@ -746,8 +751,8 @@ def run_job(jid, filepath, bbox, player_info, prev_goals):
                     predictor.update(ncx, ncy, frame_num); prev_cx, prev_cy = ncx, ncy; lost_count = 0
                 elif lost_count > LOST_THRESH * 4:
                     lost_count = LOST_THRESH
-            if frame_num % (sample_every * 15) == 0:
-                pct = int(12 + (frame_num / max(total, 1)) * 73)
+            pct = int(12 + (frame_num / max(total, 1)) * 73)
+            if pct % 10 == 0:  # update progress every ~10%
                 update_job(jid, {'step': 'Tracking {}/{}'.format(frame_num, total), 'progress': min(pct, 85)})
         cap.release()
         update_job(jid, {'step': 'Computing stats', 'progress': 88})
