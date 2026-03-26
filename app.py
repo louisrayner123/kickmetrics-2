@@ -14,7 +14,10 @@ app.config['MAX_CONTENT_LENGTH'] = 4 * 1024 * 1024 * 1024
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
-jobs = {}
+jobs = {}  # legacy in-memory fallback (not reliable across restarts)
+
+JOB_FOLDER = '/tmp/km_jobs'
+os.makedirs(JOB_FOLDER, exist_ok=True)
 
 # ════════════════════════════════════════
 #  DATABASE — PostgreSQL via psycopg2
@@ -53,6 +56,11 @@ def init_db():
             CREATE TABLE IF NOT EXISTS players (
                 email TEXT PRIMARY KEY,
                 data JSONB NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS jobs (
+                id TEXT PRIMARY KEY,
+                data JSONB NOT NULL,
+                created_at TIMESTAMP DEFAULT NOW()
             );
         ''')
         conn.commit()
@@ -132,6 +140,63 @@ def save_player(email, player_data):
         print('save_player error:', e)
 
 def hash_pw(pw): return hashlib.sha256(pw.encode()).hexdigest()
+
+# ════════════════════════════════════════
+#  JOB PERSISTENCE
+#  DB → PostgreSQL; fallback → /tmp files
+# ════════════════════════════════════════
+def get_job(jid):
+    """Read job status. DB → file fallback → in-memory fallback."""
+    if USE_DB:
+        try:
+            conn = get_db()
+            cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            cur.execute('SELECT data FROM jobs WHERE id = %s', (jid,))
+            row = cur.fetchone()
+            cur.close(); conn.close()
+            return dict(row['data']) if row else None
+        except Exception as e:
+            print('get_job DB error:', e)
+    # file-based fallback
+    fp = os.path.join(JOB_FOLDER, jid + '.json')
+    if os.path.exists(fp):
+        try:
+            with open(fp) as f:
+                return json.load(f)
+        except Exception:
+            pass
+    # last resort: in-memory (same process only)
+    return jobs.get(jid)
+
+def set_job(jid, data):
+    """Write job status. DB → file fallback → in-memory fallback."""
+    if USE_DB:
+        try:
+            conn = get_db()
+            cur = conn.cursor()
+            cur.execute(
+                'INSERT INTO jobs (id, data) VALUES (%s, %s) ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data',
+                (jid, json.dumps(data))
+            )
+            conn.commit(); cur.close(); conn.close()
+            return
+        except Exception as e:
+            print('set_job DB error:', e)
+    # file-based fallback (survives gunicorn worker restarts within same container)
+    fp = os.path.join(JOB_FOLDER, jid + '.json')
+    try:
+        with open(fp, 'w') as f:
+            json.dump(data, f)
+    except Exception as e:
+        print('set_job file error:', e)
+    # also keep in-memory as a fast path
+    jobs[jid] = data
+
+def update_job(jid, patch):
+    """Merge patch into existing job data and persist."""
+    current = get_job(jid) or {}
+    current.update(patch)
+    set_job(jid, current)
 
 # ── ROUTES ──
 @app.route('/favicon.ico')
@@ -483,7 +548,7 @@ def analyse_video():
         fp = os.path.join(UPLOAD_FOLDER, vid)
         if not os.path.exists(fp): return jsonify({'error': 'Video not found — re-upload'}), 404
         jid = str(uuid.uuid4())
-        jobs[jid] = {'status': 'running', 'progress': 0, 'step': 'Starting'}
+        set_job(jid, {'status': 'running', 'progress': 0, 'step': 'Starting'})
         threading.Thread(target=run_job, args=(jid, fp, bbox, d.get('player_info', {}), d.get('prev_goals', '')), daemon=True).start()
         return jsonify({'job_id': jid})
     except Exception as e:
@@ -491,7 +556,7 @@ def analyse_video():
 
 @app.route('/api/job/<jid>')
 def job_status(jid):
-    j = jobs.get(jid)
+    j = get_job(jid)
     return jsonify(j) if j else (jsonify({'error': 'Not found'}), 404)
 
 
@@ -621,13 +686,13 @@ def make_tracker():
 
 def run_job(jid, filepath, bbox, player_info, prev_goals):
     try:
-        jobs[jid].update({'step': 'Opening video', 'progress': 2})
+        update_job(jid, {'step': 'Opening video', 'progress': 2})
         cap = cv2.VideoCapture(filepath)
-        if not cap.isOpened(): jobs[jid] = {'status': 'error', 'error': 'Cannot open video'}; return
+        if not cap.isOpened(): set_job(jid, {'status': 'error', 'error': 'Cannot open video'}); return
         fps = cap.get(cv2.CAP_PROP_FPS) or 25
         total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         ret, frame0 = cap.read()
-        if not ret: jobs[jid] = {'status': 'error', 'error': 'Cannot read frame'}; cap.release(); return
+        if not ret: set_job(jid, {'status': 'error', 'error': 'Cannot read frame'}); cap.release(); return
         h0, w0 = frame0.shape[:2]
         scale = min(1.0, 1280 / w0)
         if scale < 1.0: frame0 = cv2.resize(frame0, (int(w0 * scale), int(h0 * scale)))
@@ -643,13 +708,13 @@ def run_job(jid, filepath, bbox, player_info, prev_goals):
                 hsv_c = cv2.cvtColor(corner, cv2.COLOR_BGR2HSV)
                 pitch_hue = int(np.mean(hsv_c[:, :, 0])); break
         tracker = make_tracker()
-        if tracker is None: jobs[jid] = {'status': 'error', 'error': 'No tracker'}; cap.release(); return
+        if tracker is None: set_job(jid, {'status': 'error', 'error': 'No tracker'}); cap.release(); return
         tracker.init(frame0, (x, y, bw, bh))
         predictor = TrajectoryPredictor(); predictor.update(x + bw // 2, y + bh // 2, 0)
         sample_every = max(1, int(fps / 6)); LOST_THRESH = int(fps * 3 / sample_every)
         positions = []; ball_pos = []; frame_num = 0; lost_count = 0
         prev_cx = x + bw // 2; prev_cy = y + bh // 2; time_on_ball = 0.0
-        jobs[jid].update({'step': 'Tracking player…', 'progress': 12})
+        update_job(jid, {'step': 'Tracking player…', 'progress': 12})
         while True:
             ret, frame = cap.read()
             if not ret: break
@@ -683,15 +748,15 @@ def run_job(jid, filepath, bbox, player_info, prev_goals):
                     lost_count = LOST_THRESH
             if frame_num % (sample_every * 15) == 0:
                 pct = int(12 + (frame_num / max(total, 1)) * 73)
-                jobs[jid].update({'step': 'Tracking {}/{}'.format(frame_num, total), 'progress': min(pct, 85)})
+                update_job(jid, {'step': 'Tracking {}/{}'.format(frame_num, total), 'progress': min(pct, 85)})
         cap.release()
-        jobs[jid].update({'step': 'Computing stats', 'progress': 88})
+        update_job(jid, {'step': 'Computing stats', 'progress': 88})
         stats = compute_stats(positions, ball_pos, fps, player_h, total, time_on_ball)
-        jobs[jid].update({'step': 'Generating feedback', 'progress': 95})
+        update_job(jid, {'step': 'Generating feedback', 'progress': 95})
         feedback = generate_feedback(stats, player_info, prev_goals)
-        jobs[jid] = {'status': 'done', 'progress': 100, 'step': 'Complete', 'stats': stats, 'feedback': feedback}
+        set_job(jid, {'status': 'done', 'progress': 100, 'step': 'Complete', 'stats': stats, 'feedback': feedback})
     except Exception as e:
-        jobs[jid] = {'status': 'error', 'error': str(e), 'detail': traceback.format_exc()}
+        set_job(jid, {'status': 'error', 'error': str(e), 'detail': traceback.format_exc()})
 
 def compute_stats(positions, ball_pos, fps, player_h, total_frames, time_on_ball):
     if len(positions) < 2: return default_stats()
